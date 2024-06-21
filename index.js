@@ -52,14 +52,34 @@ app.get("/login", (req,res) => {
     res.render("login")
 })
 
-app.post("/loggingin", (req,res) => {
-
+app.post("/loggingin", async (req,res) => {
+    var email = req.body.email;
+    var password = req.body.password;
+    console.log(email)
+    const result = await userCollection.find({email:email}).project({password: 1}).toArray();
+    if (result.length != 1) {
+        console.log("user not found")
+        res.redirect('/')
+        return;
+    }
+    if (password == result[0].password) {
+        console.log("correct password")
+        req.session.authenticated = true;
+        res.redirect('/home')
+        return;
+    }
+    else {
+        console.log("incorrect password");
+        res.redirect('/')
+        return;
+    }
 })
 
 app.post("/signingup", async (req,res) => {
     var email = req.body.email;
     var password = req.body.password;
     console.log(email)
+    console.log(password)
     await userCollection.insertOne({email: email, password: password});
     req.session.authenticated = true;
     res.redirect("/home")
