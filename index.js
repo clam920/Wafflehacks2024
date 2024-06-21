@@ -1,5 +1,6 @@
 require("./utils.js");
 require('dotenv').config();
+const path = require('path')
 
 const express = require('express');
 const app = express();
@@ -17,6 +18,20 @@ var mongoStore = MongoStore.create({
     crypto: {
         secret: mongodb_session_secret
     }
+})
+
+app.set('view engine', 'ejs')
+
+app.get("/", (req,res) => {
+    res.render("index")
+})
+
+app.get("/login", (req,res) => {
+    res.render("login")
+})
+
+app.get("/signup", (req,res) => {
+    res.render("signup")
 })
 
 app.listen(port, () => {
