@@ -1,11 +1,13 @@
-require('./utils.js');
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const session = require('express-session');
-const bcrypt = require('bcrypt'); 
+const bcrypt = require('bcrypt');
 const MongoStore = require('connect-mongo');
 const { MongoClient } = require('mongodb');
+const passport = require('passport');
+const SpotifyStrategy = require('passport-spotify').Strategy;
+const axios = require('axios');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -16,10 +18,19 @@ const mongodb_database = process.env.MONGODB_DATABASE;
 const mongodb_session_secret = process.env.MONGODB_SESSION_SECRET;
 const node_session_secret = process.env.NODE_SESSION_SECRET;
 
+const spotify_client_id = process.env.SPOTIFY_CLIENT_ID;
+const spotify_client_secret = process.env.SPOTIFY_CLIENT_SECRET;
+
+
+if (!spotify_client_id || !spotify_client_secret) {
+    console.error("Spotify client ID and secret must be provided!");
+    process.exit(1);
+}
+
 const mongoUri = `mongodb+srv://${mongodb_user}:${mongodb_password}@${mongodb_host}/?retryWrites=true&w=majority`;
 
 const navLinks = [
-    { name: 'Profile', link: '/home' },
+    { name: 'Profile', link: '/profile' },
     { name: 'Explore', link: '/explore' },
     { name: 'Message', link: '/message' }
 ];
@@ -48,22 +59,76 @@ app.use(session({
     resave: true
 }));
 
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.serializeUser((user, done) => {
+    done(null, user);
+});
+
+passport.deserializeUser((obj, done) => {
+    done(null, obj);
+});
+
+passport.use(new SpotifyStrategy({
+    clientID: spotify_client_id,
+    clientSecret: spotify_client_secret,
+    callbackURL: "http://localhost:3001/callback"
+},
+async (accessToken, refreshToken, expires_in, profile, done) => {
+    try {
+        const userCollection = database.collection('users');
+        await userCollection.updateOne(
+            { spotifyId: profile.id },
+            { $set: { spotifyId: profile.id, displayName: profile.displayName, spotifyAccessToken: accessToken, spotifyRefreshToken: refreshToken } },
+            { upsert: true }
+        );
+        return done(null, { id: profile.id, accessToken, refreshToken });
+    } catch (error) {
+        return done(error, null);
+    }
+}));
+
 app.set('view engine', 'ejs');
 
 app.get("/", (req, res) => {
-    res.render("index", { authenticated: req.session.authenticated, userName: req.session.userName, navLinks });
+    res.render("index", { authenticated: req.session.authenticated, userName: req.session.userName, navLinks, currentURL: req.originalUrl });
 });
 
-app.get("/home", (req, res) => {
+app.get("/home", async (req, res) => {
     if (!req.session.authenticated) {
         res.redirect("/login");
         return;
     }
-    res.render("profile", { authenticated: req.session.authenticated, userName: req.session.userName, navLinks });
+
+    const userCollection = database.collection('users');
+    const user = await userCollection.findOne({ userName: req.session.userName });
+
+    let spotifyProfile = null;
+    if (user && user.spotifyAccessToken) {
+        try {
+            const response = await axios.get('https://api.spotify.com/v1/me', {
+                headers: {
+                    'Authorization': `Bearer ${user.spotifyAccessToken}`
+                }
+            });
+            spotifyProfile = response.data;
+        } catch (error) {
+            console.error('Error fetching Spotify profile:', error);
+        }
+    }
+
+    res.render('profile', {
+        authenticated: req.session.authenticated,
+        userName: req.session.userName,
+        spotifyProfile: spotifyProfile,
+        navLinks: navLinks,
+        currentURL: req.originalUrl
+    });
 });
 
 app.get("/login", (req, res) => {
-    res.render("login", { authenticated: req.session.authenticated, navLinks });
+    res.render("login", { authenticated: req.session.authenticated, navLinks, currentURL: req.originalUrl });
 });
 
 app.post("/loggingin", async (req, res) => {
@@ -73,7 +138,7 @@ app.post("/loggingin", async (req, res) => {
 
     try {
         const userCollection = database.collection('users');
-        const user = await userCollection.findOne({ email: email }, { projection: { password: 1, userName: 1 } });
+        const user = await userCollection.findOne({ email: email }, { projection: { password: 1, userName: 1, spotifyAccessToken: 1, spotifyRefreshToken: 1 } });
 
         if (!user) {
             console.log("User not found");
@@ -87,7 +152,57 @@ app.post("/loggingin", async (req, res) => {
             console.log("Correct password");
             req.session.authenticated = true;
             req.session.userName = user.userName;
-            res.redirect('/home');
+
+            // Refresh Spotify token if needed
+            let spotifyProfile = null;
+            if (user.spotifyAccessToken) {
+                try {
+                    const response = await axios.get('https://api.spotify.com/v1/me', {
+                        headers: {
+                            'Authorization': `Bearer ${user.spotifyAccessToken}`
+                        }
+                    });
+                    spotifyProfile = response.data;
+                } catch (error) {
+                    if (error.response && error.response.status === 401 && user.spotifyRefreshToken) {
+                        // Access token expired, refresh it
+                        const tokenResponse = await axios({
+                            method: 'post',
+                            url: 'https://accounts.spotify.com/api/token',
+                            headers: {
+                                'Authorization': 'Basic ' + Buffer.from(spotify_client_id + ':' + spotify_client_secret).toString('base64'),
+                                'Content-Type': 'application/x-www-form-urlencoded'
+                            },
+                            data: `grant_type=refresh_token&refresh_token=${user.spotifyRefreshToken}`
+                        });
+
+                        const newAccessToken = tokenResponse.data.access_token;
+
+                        // Update user's access token in the database
+                        await userCollection.updateOne(
+                            { email: email },
+                            { $set: { spotifyAccessToken: newAccessToken } }
+                        );
+
+                        const response = await axios.get('https://api.spotify.com/v1/me', {
+                            headers: {
+                                'Authorization': `Bearer ${newAccessToken}`
+                            }
+                        });
+                        spotifyProfile = response.data;
+                    } else {
+                        console.error('Error fetching Spotify profile:', error);
+                    }
+                }
+            }
+
+            res.render('profile', {
+                authenticated: req.session.authenticated,
+                userName: req.session.userName,
+                spotifyProfile: spotifyProfile,
+                navLinks: navLinks,
+                currentURL: req.originalUrl
+            });
         } else {
             console.log("Incorrect password");
             res.redirect('/');
@@ -109,7 +224,7 @@ app.post("/signingup", async (req, res) => {
         await userCollection.insertOne({ userName: userName, email: email, password: hashedPassword });
         req.session.authenticated = true;
         req.session.userName = userName;
-        res.redirect("/home");
+        res.redirect("/profile");
     } catch (error) {
         console.error(error);
         res.redirect("/signup");
@@ -117,7 +232,7 @@ app.post("/signingup", async (req, res) => {
 });
 
 app.get("/signup", (req, res) => {
-    res.render("signup", { authenticated: req.session.authenticated, navLinks });
+    res.render("signup", { authenticated: req.session.authenticated, navLinks, currentURL: req.originalUrl });
 });
 
 app.get('/signout', (req, res) => {
@@ -126,6 +241,84 @@ app.get('/signout', (req, res) => {
             return res.redirect('/home');
         }
         res.redirect('/');
+    });
+});
+
+app.get('/auth/spotify',
+    passport.authenticate('spotify', {
+        scope: ['user-read-email', 'user-read-private'],
+        showDialog: true
+    })
+);
+
+app.get('/callback',
+    passport.authenticate('spotify', { failureRedirect: '/' }),
+    async (req, res) => {
+        req.session.authenticated = true;
+        const userCollection = database.collection('users');
+        await userCollection.updateOne(
+            { userName: req.session.userName },
+            { $set: { spotifyId: req.user.id, spotifyAccessToken: req.user.accessToken, spotifyRefreshToken: req.user.refreshToken } }
+        );
+        res.redirect('/profile');
+    }
+);
+
+app.get('/profile', async (req, res) => {
+    if (!req.session.authenticated) {
+        res.redirect('/login');
+        return;
+    }
+
+    const userCollection = database.collection('users');
+    const user = await userCollection.findOne({ userName: req.session.userName });
+
+    let spotifyProfile = null;
+    if (user && user.spotifyAccessToken) {
+        try {
+            const response = await axios.get('https://api.spotify.com/v1/me', {
+                headers: {
+                    'Authorization': `Bearer ${user.spotifyAccessToken}`
+                }
+            });
+            spotifyProfile = response.data;
+        } catch (error) {
+            if (error.response && error.response.status === 401 && user.spotifyRefreshToken) {
+                const tokenResponse = await axios({
+                    method: 'post',
+                    url: 'https://accounts.spotify.com/api/token',
+                    headers: {
+                        'Authorization': 'Basic ' + Buffer.from(spotify_client_id + ':' + spotify_client_secret).toString('base64'),
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    data: `grant_type=refresh_token&refresh_token=${user.spotifyRefreshToken}`
+                });
+
+                const newAccessToken = tokenResponse.data.access_token;
+
+                await userCollection.updateOne(
+                    { userName: req.session.userName },
+                    { $set: { spotifyAccessToken: newAccessToken } }
+                );
+
+                const response = await axios.get('https://api.spotify.com/v1/me', {
+                    headers: {
+                        'Authorization': `Bearer ${newAccessToken}`
+                    }
+                });
+                spotifyProfile = response.data;
+            } else {
+                console.error('Error fetching Spotify profile:', error);
+            }
+        }
+    }
+
+    res.render('profile', {
+        authenticated: req.session.authenticated,
+        userName: req.session.userName,
+        spotifyProfile: spotifyProfile,
+        navLinks: navLinks,
+        currentURL: req.originalUrl
     });
 });
 

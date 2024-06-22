@@ -1,7 +1,15 @@
 <%- include("templates/header") %>
 <%- include("templates/navbar") %>
 
-<h1><%= userName %> </h1>
+<h1><%= userName %></h1>
 <h3>Description</h3>
+
+<% if (spotifyProfile) { %>
+    <h2>Spotify Profile</h2>
+    <p>Name: <%= spotifyProfile.display_name %></p>
+    <p>Email: <%= spotifyProfile.email %></p>
+<% } else { %>
+    <a href="/auth/spotify" class="btn btn-primary">Connect to Spotify</a>
+<% } %>
 
 <%- include("templates/footer") %>
