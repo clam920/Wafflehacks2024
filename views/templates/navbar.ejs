@@ -6,18 +6,19 @@
     </button>
     <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav">
-            <li class="nav-item active">
-                <a class="nav-link" href="#">Home</a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" href="#">Explore</a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" href="#">Message</a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" href="#">Profile</a>
-            </li>
+            <% for(let i = 0; i < navLinks.length; i++){%>
+                <li class="nav-item">
+                  <a class="nav-link <% if(locals.navLinks[i].link == locals.currentURL) { %>active<% } %>" aria-current="page" href="<%= navLinks[i].link%>" ><%= navLinks[i].name%></a> 
+                </li>
+              <% } %>
+            <% if (authenticated) { %>
+                <li class="nav-item">
+                    <a class="nav-link" href="/signout">Logout</a>
+                </li>
+            <% } %>
+              
         </ul>
     </div>
+
+    
 </nav>
