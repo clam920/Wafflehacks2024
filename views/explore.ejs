@@ -1,0 +1,5 @@
+<%- include("templates/header") %>
+<% for (let user = 0; user < users.length; user++) {%>
+    <%- include('templates/usercard',{user:users[user].userName}) %>
+<% } %>
+<%- include("templates/footer") %>
