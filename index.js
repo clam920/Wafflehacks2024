@@ -45,6 +45,7 @@ MongoClient.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true 
 
 app.use(express.urlencoded({ extended: true }));
 
+
 var mongoStore = MongoStore.create({
     mongoUrl: mongoUri,
     crypto: {
@@ -77,6 +78,7 @@ passport.use(new SpotifyStrategy({
 },
 async (accessToken, refreshToken, expires_in, profile, done) => {
     try {
+        //ur trolling why is this not a global
         const userCollection = database.collection('users');
         await userCollection.updateOne(
             { spotifyId: profile.id },
@@ -321,6 +323,42 @@ app.get('/profile', async (req, res) => {
         currentURL: req.originalUrl
     });
 });
+
+app.post('/editprofile', async(req,res) => {
+    const userCollection = database.collection('users');
+    prompt1 = req.body.prompt1;
+    prompt1ans = req.body.prompt1ans;
+
+    prompt2 = req.body.prompt2;
+    prompt2ans = req.body.prompt2ans;
+
+    prompt3 = req.body.prompt3;
+    prompt3ans = req.body.prompt3ans;
+
+    prompt4 = req.body.prompt4;
+    prompt4ans = req.body.prompt4ans;
+
+    prompt5 = req.body.prompt5;
+    prompt5ans = req.body.prompt5ans;
+
+    username = req.session.username;
+
+    const promptsdata = {
+        prompt1:prompt1,
+        prompt1ans:prompt1ans,
+        prompt2:prompt2,
+        prompt2ans:prompt2ans,
+        prompt3:prompt3,
+        prompt3ans:prompt3ans,
+        prompt4:prompt4,
+        prompt4ans:prompt4ans,
+        prompt5:prompt5,
+        prompt5ans:prompt5ans
+    };
+
+    const result = await userCollection.updateOne({username:username},{$set:promptsdata},{upsert:true})
+    res.redirect('/profile')
+})
 
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);

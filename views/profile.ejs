@@ -11,5 +11,50 @@
 <% } else { %>
     <a href="/auth/spotify" class="btn btn-primary">Connect to Spotify</a>
 <% } %>
+<form action="/editprofile" method="post">
+    <select name="prompt1" class="form-select" aria-label="Default select example">
+        <option selected>Open this select menu</option>
+        <option value="My favourite song">My favourite song</option>
+        <option value="The song I listen to when I'm sad">The song I listen to when I'm sad</option>
+        <option value="If I were a song I would be">If I were a song I would be</option>
+      </select>
+      <textarea name="prompt1ans"></textarea>
+
+      <select name="prompt2" class="form-select" aria-label="Default select example">
+        <option selected>Open this select menu</option>
+        <option value="My favourite song">My favourite song</option>
+        <option value="The song I listen to when I'm sad">The song I listen to when I'm sad</option>
+        <option value="If I were a song I would be">If I were a song I would be</option>
+      </select>
+      <textarea name="prompt2ans"></textarea>
+
+      <select name="prompt3" class="form-select" aria-label="Default select example">
+        <option selected>Open this select menu</option>
+        <option value="My favourite song">My favourite song</option>
+        <option value="The song I listen to when I'm sad">The song I listen to when I'm sad</option>
+        <option value="If I were a song I would be">If I were a song I would be</option>
+      </select>
+      <textarea name="prompt3ans"></textarea>
+
+      <select name="prompt4" class="form-select" aria-label="Default select example">
+        <option selected>Open this select menu</option>
+        <option value="My favourite song">My favourite song</option>
+        <option value="The song I listen to when I'm sad">The song I listen to when I'm sad</option>
+        <option value="If I were a song I would be">If I were a song I would be</option>
+      </select>
+      <textarea name="prompt4ans"></textarea>
+
+      <select name="prompt5" class="form-select" aria-label="Default select example">
+        <option selected>Open this select menu</option>
+        <option value="My favourite song">My favourite song</option>
+        <option value="The song I listen to when I'm sad">The song I listen to when I'm sad</option>
+        <option value="If I were a song I would be">If I were a song I would be</option>
+      </select>
+      <textarea name="prompt5ans"></textarea>
+
+      <button type="submit">save</button>
+</form>
+
+
 
 <%- include("templates/footer") %>
