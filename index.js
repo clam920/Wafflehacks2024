@@ -266,6 +266,12 @@ app.get('/callback',
     }
 );
 
+app.get("/explore", async (req,res) => {
+    const userCollection = database.collection('users');
+    const result = await userCollection.find().limit(6).toArray();
+    res.render("explore",{users:result})
+})
+
 app.get('/profile', async (req, res) => {
     if (!req.session.authenticated) {
         res.redirect('/login');
